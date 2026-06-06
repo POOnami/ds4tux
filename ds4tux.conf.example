@@ -1,0 +1,26 @@
+# ds4tux configuration
+# Place at ~/.config/ds4tux/config.toml or /etc/ds4tux/config.toml
+
+# uinput mapping: "xpad", "xboxdrv", or "ds4"
+mapping = "xpad"
+
+# LED brightness (0-100)
+led_brightness = 100
+
+# Copycat mode: "auto", "yes", "no"
+copycat = "auto"
+
+# Block competing kernel HID modules at startup (requires root)
+block_kmod = false
+
+# Gyro/IMU passthrough (creates separate gyro uinput device)
+gyro = false
+
+# Bluetooth keepalive interval in seconds
+keepalive_interval = 5.0
+
+# LED color (RGB 0-255)
+[led]
+r = 0
+g = 128
+b = 0

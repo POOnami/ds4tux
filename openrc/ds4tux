@@ -1,0 +1,25 @@
+#!/sbin/openrc-run
+
+description="DS4Tux - DualShock 4 Userspace Driver"
+
+command=/usr/bin/ds4tux
+command_args="--service"
+pidfile="/run/${RC_SVCNAME}.pid"
+command_background=true
+
+depend() {
+    need bluetoothd
+    use udev
+}
+
+start_pre() {
+    checkpath -d -m 0755 /run/${RC_SVCNAME}
+}
+
+start_post() {
+    /usr/bin/ds4tux block-kmod
+}
+
+stop_post() {
+    /usr/bin/ds4tux unblock-kmod
+}

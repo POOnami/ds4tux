@@ -1,0 +1,18 @@
+[Unit]
+Description=DS4Tux - DualShock 4 Userspace Driver
+After=bluetooth.service
+Wants=bluetooth.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/ds4tux
+ExecStartPost=/usr/bin/ds4tux block-kmod
+ExecStopPost=/usr/bin/ds4tux unblock-kmod
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+RuntimeDirectory=ds4tux
+
+[Install]
+WantedBy=default.target

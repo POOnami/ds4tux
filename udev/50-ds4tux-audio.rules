@@ -1,0 +1,2 @@
+# ds4tux: disable DualShock 4 V2 USB audio interface (headphone jack)
+ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_interface", ATTRS{idVendor}=="054c", ATTRS{idProduct}=="09cc", ATTR{bInterfaceClass}=="01", RUN+="/bin/sh -c 'echo $kernel > /sys/bus/usb/drivers/snd-usb-audio/unbind 2>/dev/null || true'"
