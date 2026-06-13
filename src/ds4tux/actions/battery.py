@@ -25,6 +25,9 @@ class BatteryMonitor:
         self._last_report_time = 0.0
         self._last_warn_time = 0.0
         self._warn_interval = 5.0
+        self._charge_count = 0
+        self._discharge_count = 0
+        self._debounce_threshold = 3
 
     @property
     def level(self) -> int:
@@ -52,7 +55,21 @@ class BatteryMonitor:
 
     def update(self, report: DS4Report) -> bool:
         self._level = report.battery_percent
-        self._charging = report.is_charging
+        raw_charging = report.is_charging
+        if raw_charging != self._charging:
+            if raw_charging:
+                self._charge_count += 1
+                self._discharge_count = 0
+                if self._charge_count >= self._debounce_threshold:
+                    self._charging = True
+            else:
+                self._discharge_count += 1
+                self._charge_count = 0
+                if self._discharge_count >= self._debounce_threshold:
+                    self._charging = False
+        else:
+            self._charge_count = 0
+            self._discharge_count = 0
         self._last_report_time = time.time()
 
         now = time.time()

@@ -128,7 +128,6 @@ BATTERY ENCODING
   raw nibble 0-10 → battery_percent = raw * 10   (e.g. 5 → 50 %)
   raw nibble 10  → 100 % (controller reports 10 when full)
   usb_plugged    → is_charging = True
-  Copycat controllers: usb_plugged fixed True (fake charge status).
 
 ────────────────────────────────────────────────────────────────────────────────
 OUTPUT REPORT (to L2CAP CTRL channel)
@@ -324,9 +323,6 @@ def parse_input_report(data: bytes, is_bluetooth: bool = False, copycat: bool = 
         r.usb_plugged = bool(buf[30] & 0x10) if len(buf) > 30 else False
         r.mic_plugged = bool(buf[30] & 0x40) if len(buf) > 30 else False
         r.headphones_plugged = bool(buf[30] & 0x20) if len(buf) > 30 else False
-
-    if copycat:
-        r.usb_plugged = True
 
     # Standard DS4 input report layout — sticks and buttons align at same
     # positions after stripping headers, except BT has a leading seq byte.

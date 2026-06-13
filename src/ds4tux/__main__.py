@@ -57,6 +57,8 @@ class DS4Controller:
         self._enabled = True
         self._status = "disconnected"
         self._backend = None
+        self._charge_led_active = False
+        self._charge_led_full = False
 
     def set_settings_server(self, server):
         self._settings_server = server
@@ -70,6 +72,9 @@ class DS4Controller:
 
         self.led.set_write_fn(lambda r, g, b, bo, bf: self._write_led(r, g, b, bo, bf))
         self.apply_config()
+
+        self._charge_led_active = False
+        self._charge_led_full = False
 
         if self.uinput_dev and self.uinput_dev._uinput:
             try:
@@ -93,11 +98,14 @@ class DS4Controller:
         report.gyro_filtered_y = fy
         report.gyro_filtered_z = fz
 
+        was_charging = self.battery.charging
+        was_level = self.battery.level
         just_low = self.battery.update(report)
 
         if just_low:
             self.led.set_blink(200, 400, duration=2.0)
 
+        self._update_charge_led(was_charging, was_level)
         self.led.update()
 
         if self._enabled and self.uinput_mgr._active and self.uinput_dev:
@@ -121,6 +129,39 @@ class DS4Controller:
                     cb(self.device_id, report)
                 except Exception as e:
                     logger.warning("Report callback failed: %s", e)
+
+    def _update_charge_led(self, was_charging: bool, was_level: int):
+        charging = self.battery.charging
+        level = self.battery.level
+        if charging:
+            if not self._charge_led_active:
+                self.led.stop_blink()
+                cfg = self.config
+                r = cfg.get("led", {}).get("r", 0)
+                g = cfg.get("led", {}).get("g", 0)
+                b = cfg.get("led", {}).get("b", 128)
+                self.led.start_breathing(r, g, b, min_brightness=15, max_brightness=80, period=3.0)
+                self._charge_led_active = True
+                self._charge_led_full = False
+            return
+        if self._charge_led_active:
+            self.led.stop_breathing()
+            self.led.stop_blink()
+            self._charge_led_active = False
+        if level >= 90:
+            if not self._charge_led_full:
+                self.led.set_color(0, 255, 0)
+                self.led.set_brightness(90)
+                self._charge_led_full = True
+        elif self._charge_led_full:
+            cfg = self.config
+            self.led.set_color(
+                cfg.get("led", {}).get("r", 0),
+                cfg.get("led", {}).get("g", 0),
+                cfg.get("led", {}).get("b", 128),
+            )
+            self.led.set_brightness(cfg.get("led_brightness", 60))
+            self._charge_led_full = False
 
     def set_enabled(self, enabled: bool):
         self._enabled = enabled
@@ -283,8 +324,28 @@ def _detect_l2cap_backend(args):
     return L2capBtBackend(hex_dump=args.hex)
 
 
+def _is_bluez_paired() -> bool:
+    """Check if any DS4 is already paired via BlueZ."""
+    try:
+        from ds4tux.backend.bluez_client import BluezClient
+        client = BluezClient()
+        for path, props in client.get_devices():
+            modalias = props.get("Modalias", "")
+            name = props.get("Name", "")
+            if not ("054C" in modalias.upper()
+                    or "PLAYSTATION" in name.upper()
+                    or "WIRELESS CONTROLLER" in name.upper()):
+                continue
+            if props.get("Paired", False) or props.get("Trusted", False):
+                return True
+    except Exception:
+        pass
+    return False
+
+
 def _detect_usb_backend():
-    """Scan pyudev for a USB DS4 hidraw device. Returns HidrawBackend or None."""
+    """Scan pyudev for a USB DS4 hidraw device. Returns HidrawBackend or None.
+    Skips if the controller is already paired via BlueZ (user wants BT)."""
     try:
         import pyudev
         ctx = pyudev.Context()
@@ -313,14 +374,18 @@ def _detect_usb_backend():
                     hid_name = a.get("HID_NAME", "")
             if vid == "054c" and pid in known_pids:
                 logger.info("DS4 detected via USB/hidraw at %s", hidraw_node)
-                from ds4tux.backend.hidraw import HidrawBackend
-                return HidrawBackend()
-            if hid_name and any(kw in hid_name.lower()
-                               for kw in ("wireless controller", "dualshock")):
+            elif hid_name and any(kw in hid_name.lower()
+                                   for kw in ("wireless controller", "dualshock")):
                 logger.info("DS4 detected via USB/hidraw (name match) at %s",
                             hidraw_node)
-                from ds4tux.backend.hidraw import HidrawBackend
-                return HidrawBackend()
+            else:
+                continue
+            # Check BlueZ — if controller is paired there, user wants BT mode
+            if _is_bluez_paired():
+                logger.info("DS4 found paired on BlueZ — preferring BT backend")
+                return None
+            from ds4tux.backend.hidraw import HidrawBackend
+            return HidrawBackend()
     except Exception as e:
         logger.debug("USB detection failed: %s", e)
     return None
@@ -375,22 +440,23 @@ def _scan_usb_ds4_devices(seen: set[str]):
                     mac = ":".join(f"{b:02x}" for b in mac_b)
             except (OSError, IOError, ValueError):
                 pass
-        logger.info("USB DS4 found at %s (mac=%s)", hidraw_node, mac or "N/A")
+        logger.info("USB DS4 found at %s (mac=%s)", hidraw_node, mac or "?")
         seen.add(syspath)
-        if not mac:
-            continue
         try:
             fd = os.open(hidraw_node, os.O_RDWR | os.O_NONBLOCK)
         except OSError:
             continue
+        copycat = False
         try:
             copycat, _ = detect_copycat(fd)
         except Exception:
-            continue
-        finally:
             os.close(fd)
-        save_device_info(mac, {"detected_copycat": copycat})
-        logger.info("USB DS4 %s: copycat=%s — saved to config", mac, copycat)
+            continue
+        os.close(fd)
+        logger.info("USB DS4 %s: copycat=%s", hidraw_node, copycat)
+        if mac:
+            save_device_info(mac, {"detected_copycat": copycat})
+            logger.info("Saved copycat=%s for %s", copycat, mac)
 
 
 def _detect_bluez_backend(args):
@@ -735,9 +801,10 @@ def run_daemon(args, config, controllers: dict[str, DS4Controller],
                     dev = ctrl_inst.device
                     if dev and not dev._dead:
                         dev.keepalive()
-                if now >= _usb_check_cooldown:
-                    _usb_check_cooldown = now + 5.0
-                    _scan_usb_ds4_devices(_scanned_usb)
+
+            if now >= _usb_check_cooldown:
+                _usb_check_cooldown = now + 5.0
+                _scan_usb_ds4_devices(_scanned_usb)
 
             have_data = False
             for dev_id, ctrl in list(controllers.items()):

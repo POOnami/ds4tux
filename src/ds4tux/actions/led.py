@@ -38,6 +38,14 @@ class LEDController:
         self._sw_blink_state = True
         self._sw_blink_next_toggle = 0.0
         self._full_brightness_until = 0.0
+        self._breathing_active = False
+        self._breathing_r = 0
+        self._breathing_g = 0
+        self._breathing_b = 0
+        self._breathing_max_pct = 80
+        self._breathing_min_pct = 15
+        self._breathing_period = 3.0
+        self._breathing_phase = 0.0
 
     def set_color(self, r: int, g: int, b: int):
         with self._lock:
@@ -72,6 +80,26 @@ class LEDController:
             self._sw_blink_until = 0.0
             self._dirty = True
 
+    def start_breathing(self, r: int, g: int, b: int,
+                        min_brightness: int = 0, max_brightness: int = 80,
+                        period: float = 3.0):
+        with self._lock:
+            self._breathing_active = True
+            self._breathing_r = max(0, min(255, r))
+            self._breathing_g = max(0, min(255, g))
+            self._breathing_b = max(0, min(255, b))
+            self._breathing_min_pct = max(0, min(100, min_brightness))
+            self._breathing_max_pct = max(1, min(100, max_brightness))
+            self._breathing_period = max(0.5, period)
+            self._breathing_phase = time.time()
+            self._sw_blink_active = False
+            self._dirty = True
+
+    def stop_breathing(self):
+        with self._lock:
+            self._breathing_active = False
+            self._dirty = True
+
     def set_write_fn(self, fn):
         with self._lock:
             self._write_fn = fn
@@ -104,7 +132,19 @@ class LEDController:
             if not self._dirty:
                 return False
 
-            if self._sw_blink_active and not self._sw_blink_state:
+            if self._breathing_active:
+                elapsed = now - self._breathing_phase
+                t = elapsed % self._breathing_period
+                half = self._breathing_period / 2.0
+                spread = self._breathing_max_pct - self._breathing_min_pct
+                if t < half:
+                    pct = self._breathing_min_pct + int((t / half) * spread)
+                else:
+                    pct = self._breathing_min_pct + int((1.0 - (t - half) / half) * spread)
+                r = (self._breathing_r * pct) // 100
+                g = (self._breathing_g * pct) // 100
+                b = (self._breathing_b * pct) // 100
+            elif self._sw_blink_active and not self._sw_blink_state:
                 r, g, b = 0, 0, 0
             else:
                 pct = 100 if now < self._full_brightness_until else self._brightness

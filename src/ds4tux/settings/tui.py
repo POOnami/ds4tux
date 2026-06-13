@@ -520,11 +520,15 @@ class DS4TuxTUI:
 
             # dpad cross
             dpad = axes.get("dpad", 8)
-            _box(y + 0, 8, "^", dpad in (0, 1, 7))
-            _box(y + 1, 4, "<", dpad in (5, 6, 7))
-            _box(y + 1, 8, "o", dpad == 8)
-            _box(y + 1, 12, ">", dpad in (1, 2, 3))
-            _box(y + 2, 8, "v", dpad in (3, 4, 5))
+            _box(y + 0, 0, "up", dpad in (0, 1, 7))
+            _box(y + 0, 13, "^", dpad in (0, 1, 7))
+            _box(y + 1, 0, "left", dpad in (5, 6, 7))
+            _box(y + 1, 7, "<", dpad in (5, 6, 7))
+            _box(y + 1, 13, "o", dpad == 8)
+            _box(y + 1, 19, ">", dpad in (1, 2, 3))
+            _box(y + 1, 25, "right", dpad in (1, 2, 3))
+            _box(y + 2, 0, "down", dpad in (3, 4, 5))
+            _box(y + 2, 13, "v", dpad in (3, 4, 5))
             y += 4
 
             _btngrp(y, 2, ("triangle", "▲"), ("circle", "●"), ("cross", "✕"), ("square", "■"))

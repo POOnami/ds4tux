@@ -117,10 +117,15 @@ class HidrawDevice:
                 copycat, mac = detect_copycat(self._fd)
                 self.copycat = copycat
                 self.detected_copycat = copycat
-                self.mac = mac
-                if mac:
+                if mac and not copycat:
+                    self.mac = mac
                     mac_str = ":".join(f"{b:02x}" for b in mac)
                     save_device_info(mac_str, {"detected_copycat": copycat})
+                elif mac and copycat:
+                    # Copycat 0x12 MAC is unreliable — don't save as device identity
+                    self.mac = mac
+                else:
+                    self.mac = None
             except DeviceError:
                 logger.debug("Feature report detection failed, defaulting")
 

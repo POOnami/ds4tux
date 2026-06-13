@@ -86,7 +86,7 @@ class SettingsServer:
             "type": "state",
             "connected": True,
             "battery": report.battery_percent,
-            "charging": report.is_charging,
+            "charging": ctrl.battery.charging,
             "copycat": getattr(ctrl.device, "copycat", False),
             "detected_copycat": getattr(ctrl.device, "detected_copycat", getattr(ctrl.device, "copycat", False)),
             "device_mode": ctrl.config.get("device_mode", "auto"),
